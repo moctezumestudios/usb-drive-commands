@@ -1,0 +1,104 @@
+0
+
+To get the right USB and it's path:
+
+noticed that the first USB plugged into my system is mounted on the /dev/sdb1 filesystem and the second is mounted on the /dev/sdc1 filesystem. I added a section to switch to /dev/sdc1 if udevadm info -q all -n "/dev/sdb" | grep "ID_BUS=usb" returned true.
+
+if diff between df --output=target | grep "/media/darren" before and after has "/media/darren" in it, that's presumably the new USB. USB is mounted.
+
+if udevadm info -q all -n "/dev/sdb" | grep "ID_BUS=usb is true then that device mounted on "/dev/sdb" is a usb device
+
+to get the path, and make sure I was grabbing the right one: df --output=source,avail,target | grep "$FILESYSTEM" | grep "$MOUNTPOINT" and some really nice awk
+
+udevadm info -q all -n "$FILESYSTEM" | grep "ID_BUS=usb" > $RESULT
+USB_ADDR="$BACKUP_DIR"/usb_addr.txt
+if grep "ID_BUS=usb" "$RESULT" ; then
+    df --output=source,avail,target | grep "$FILESYSTEM" | grep "$MOUNTPOINT" > "$USB_ADDR"
+    awk -i inplace '{$0=gensub(/\s*\S+/,"",1)}1' "$USB_ADDR"
+    awk -i inplace '{$0=gensub(/\s*\S+/,"",1)}1' "$USB_ADDR"
+    sed -i 's/^ *//' "$USB_ADDR"
+Unfortunately diffing fails if other stuff is added or removed. But, at least it fails nicely if it grabs the wrong device when using the df filtered output and grepping for the filesystem and mountpoint.
+
+Tried awk 'NR!=1{print $NF}' <(df)|sort. Still not great on bash expansions.
+
+#!/bin/bash
+
+if [ "$UID" -eq 0 ] ; then
+        echo "Don't run this as root"
+        exit 50
+fi
+
+#Create a backup file with the date as title in a backup directory
+BACKUP_DIR="$HOME/backup"
+DATE_OF_COPY=$(date --rfc-3339=date)
+BACKUP_FILE="$BACKUP_DIR/$DATE_OF_COPY"
+
+[ -d "$BACKUP_DIR" ] || mkdir -m 700 "$BACKUP_DIR"
+
+#find all files recursively in $HOME directory
+find -P $HOME >> "$BACKUP_FILE"
+
+#use lzma to compress
+xz -zk --format=auto --check=sha256 --threads=0 "$BACKUP_FILE"
+
+#making files to use in operations of before and after usb is inserted info and diff between them
+#this is part of how we will insure that we are writing to the correct device
+BEFORE="$BACKUP_DIR"/before_usb.txt
+AFTER="$BACKUP_DIR"/after_usb.txt
+DIFFERENCE="$BACKUP_DIR"/difference.txt
+#MOUNTPOINT=where computer mounts USBs by default
+MOUNTPOINT="/media/darren"
+FILESYSTEM="/dev/sdb"
+RESULT="$BACKUP_DIR"/result.txt
+
+
+#if there is something on the mountpoint before we plug in the usb, we want to know
+#so the new device is written to
+udevadm info -q all -n "$FILESYSTEM" | grep "ID_BUS=usb" > $RESULT
+if grep "ID_BUS=usb" "$RESULT" ; then
+        FILESYSTEM="/dev/sdc"
+        echo $FILESYSTEM
+fi        
+
+df --output=target | grep $MOUNTPOINT > "$BEFORE"
+
+read -p 'Enter USB or hard drive and press any button' ok
+
+df --output=target | grep $MOUNTPOINT > "$AFTER"
+#dif them to find the new one
+diff "$BEFORE" "$AFTER" > "$DIFFERENCE"
+
+# Look in mountpoint in the difference between the before and after df outputs
+SEARCH_FOR_MOUNT=$(grep "$MOUNTPOINT" "$DIFFERENCE")
+
+until [ "$SEARCH_FOR_MOUNT" ] ;
+do
+        df --output=target | grep $MOUNTPOINT > "$AFTER"
+        diff "$BEFORE" "$AFTER" > "$DIFFERENCE"
+        SEARCH_FOR_MOUNT=$(grep "$MOUNTPOINT" "$DIFFERENCE")
+
+done
+#check if new device plugged into filesystem is a USB
+udevadm info -q all -n "$FILESYSTEM" | grep "ID_BUS=usb" > $RESULT
+USB_ADDR="$BACKUP_DIR"/usb_addr.txt
+if grep "ID_BUS=usb" "$RESULT" ; then
+        df --output=source,avail,target | grep "$FILESYSTEM" | grep "$MOUNTPOINT" > "$USB_ADDR"
+        awk -i inplace '{$0=gensub(/\s*\S+/,"",1)}1' "$USB_ADDR"
+        awk -i inplace '{$0=gensub(/\s*\S+/,"",1)}1' "$USB_ADDR"
+        sed -i 's/^ *//' "$USB_ADDR"
+
+        if [ ! -s $USB_ADDR ] ; then
+              echo "Error finding USB Address"
+              exit 100
+
+
+        ADDR=$(cat "$USB_ADDR")
+        cp "$BACKUP_FILE.xz" "$ADDR"
+        rm "$BACKUP_FILE" "$USB_ADDR" "$RESULT" "$BEFORE" "$AFTER" "$DIFFERENCE"
+
+else
+        echo "Device is not a USB"
+        exit 52
+fi
+
+exit $?
