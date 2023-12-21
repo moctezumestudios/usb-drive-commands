@@ -1,0 +1,132 @@
+In addition to using the standard mount command (which requires root) you can mount drives using udisks and dbus with your standard user.
+
+To do this it is useful (but not required) to know a few things about the drive first:
+
+What device it is (i.e. /dev/sdb1)
+what filesystem it uses.
+Knowing these you can use a simple command to mount a drive from the command line.
+
+gdbus call --system --dest org.freedesktop.UDisks --object-path /org/freedesktop/UDisks/devices/<device> --method org.freedesktop.UDisks.Device.FilesystemMount "<filesystem>" []
+
+this call should echo the path it is mounted at if the mount succeeds.
+
+To unmount drives mounted in this way you can run:
+
+gdbus call --system --dest org.freedesktop.UDisks --object-path /org/freedesktop/UDisks/devices/<device> --method org.freedesktop.UDisks.Device.FilesystemUnmount []
+
+N.B. the <device> is simply the end of the path to it. So for example if what you want to mount is at /dev/sdb2 then you would put sdb2 in place of <device>.
+
+If you do not know which device it is or what filesystem it uses do not fear. You can easily print out all that information with this little command:
+
+gdbus introspect --system --dest org.freedesktop.UDisks --object-path /org/freedesktop/UDisks/devices --recurse --only-properties | grep -E "(readonly .+ (IdLabel|IdType|Device(IsMounted|IsDrive|File) ).*|\}|.*\{)"
+This will print out something like this:
+
+node /org/freedesktop/UDisks/devices {
+  node /org/freedesktop/UDisks/devices/sda {
+    interface org.freedesktop.UDisks.Device {
+        readonly s IdLabel = '';
+        readonly s IdType = '';
+        readonly s IdUsage = '';
+        readonly b DeviceIsMounted = false;
+        readonly s DeviceFile = '/dev/sda';
+    };
+  };
+  node /org/freedesktop/UDisks/devices/sda1 {
+    interface org.freedesktop.UDisks.Device {
+        readonly s IdLabel = 'SYSTEM';
+        readonly s IdType = 'ntfs';
+        readonly s IdUsage = 'filesystem';
+        readonly b DeviceIsMounted = false;
+        readonly s DeviceFile = '/dev/sda1';
+    };
+  };
+  node /org/freedesktop/UDisks/devices/sda2 {
+    interface org.freedesktop.UDisks.Device {
+        readonly s IdLabel = 'Windows7';
+        readonly s IdType = 'ntfs';
+        readonly s IdUsage = 'filesystem';
+        readonly b DeviceIsMounted = true;
+        readonly s DeviceFile = '/dev/sda2';
+    };
+  };
+  node /org/freedesktop/UDisks/devices/sda3 {
+    interface org.freedesktop.UDisks.Device {
+        readonly s IdLabel = 'Recovery';
+        readonly s IdType = 'ntfs';
+        readonly s IdUsage = 'filesystem';
+        readonly b DeviceIsMounted = false;
+        readonly s DeviceFile = '/dev/sda3';
+    };
+  };
+  node /org/freedesktop/UDisks/devices/sda4 {
+    interface org.freedesktop.UDisks.Device {
+        readonly s IdLabel = '';
+        readonly s IdType = '';
+        readonly s IdUsage = '';
+        readonly b DeviceIsMounted = false;
+        readonly s DeviceFile = '/dev/sda4';
+    };
+  };
+  node /org/freedesktop/UDisks/devices/sda5 {
+    interface org.freedesktop.UDisks.Device {
+        readonly s IdLabel = '';
+        readonly s IdType = 'ext4';
+        readonly s IdUsage = 'filesystem';
+        readonly b DeviceIsMounted = true;
+        readonly s DeviceFile = '/dev/sda5';
+    };
+  };
+  node /org/freedesktop/UDisks/devices/sda6 {
+    interface org.freedesktop.UDisks.Device {
+        readonly s IdLabel = '';
+        readonly s IdType = 'swap';
+        readonly s IdUsage = 'other';
+        readonly b DeviceIsMounted = false;
+        readonly s DeviceFile = '/dev/sda6';
+    };
+  };
+  node /org/freedesktop/UDisks/devices/sda7 {
+    interface org.freedesktop.UDisks.Device {
+        readonly s IdLabel = '';
+        readonly s IdType = 'ext4';
+        readonly s IdUsage = 'filesystem';
+        readonly b DeviceIsMounted = true;
+        readonly s DeviceFile = '/dev/sda7';
+    };
+  };
+  node /org/freedesktop/UDisks/devices/sdb {
+    interface org.freedesktop.UDisks.Device {
+        readonly s IdLabel = '';
+        readonly s IdType = '';
+        readonly s IdUsage = '';
+        readonly b DeviceIsMounted = false;
+        readonly s DeviceFile = '/dev/sdb';
+    };
+  };
+  node /org/freedesktop/UDisks/devices/sdb1 {
+    interface org.freedesktop.UDisks.Device {
+        readonly s IdLabel = 'USB DRIVE';
+        readonly s IdType = 'vfat';
+        readonly s IdUsage = 'filesystem';
+        readonly b DeviceIsMounted = false;
+        readonly s DeviceFile = '/dev/sdb1';
+    };
+  };
+  node /org/freedesktop/UDisks/devices/sr0 {
+    interface org.freedesktop.UDisks.Device {
+        readonly s IdLabel = '';
+        readonly s IdType = '';
+        readonly s IdUsage = '';
+        readonly b DeviceIsMounted = false;
+        readonly s DeviceFile = '/dev/sr0';
+    };
+  };
+};
+Those that have IdUsage = 'filesystem' may be mounted using the above command.
+
+This means that, for example, if i wanted to mount the device 'USB DRIVE' i would run the command
+
+gdbus call --system --dest org.freedesktop.UDisks --object-path /org/freedesktop/UDisks/devices/sdb1 --method org.freedesktop.UDisks.Device.FilesystemMount "vfat" []
+These commands all work using the dbus messaging system, the same way that Nautilus and other file managers auto-mount things. In these commands we are sending various objects (i.e. /org/freedesktop/... messages asking them to mount and unmount certain devices. They might or might not do this depending on the permissions one has been given in PolicyKit.
+
+Using similar commands one can control almost every aspect of ones experience in Ubuntu and simulate most system programs and functions (i.e. shutdown, volume change, etc.).
